@@ -12,6 +12,14 @@ pub enum Error {
     DidNotAdvance,
     IntegerOverflow,
     ReturnAddressIsNull,
+    /// An unwind rule that wasn't `EndOfStack` produced an end-of-stack signal
+    /// (e.g. read a zero return address, or `bp == 0` mid-walk). On Linux/perf
+    /// captures this is a strong indicator that the (IP, regs, stack) triple
+    /// is internally inconsistent (typically because the IP landed on an
+    /// SP-modifying instruction and the captured SP reflects post-execution
+    /// state). The previous `Ok(None)` was indistinguishable from a genuine
+    /// `EndOfStack` rule, so callers couldn't detect drift.
+    UnexpectedEndOfStack,
 }
 
 impl core::fmt::Display for Error {
@@ -27,6 +35,10 @@ impl core::fmt::Display for Error {
             ),
             Self::IntegerOverflow => write!(f, "Unwinding caused integer overflow"),
             Self::ReturnAddressIsNull => write!(f, "Return address is null"),
+            Self::UnexpectedEndOfStack => write!(
+                f,
+                "Unwind rule produced an unexpected end-of-stack signal (likely SP/IP drift)"
+            ),
         }
     }
 }

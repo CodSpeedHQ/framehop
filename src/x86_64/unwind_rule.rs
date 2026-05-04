@@ -204,7 +204,11 @@ impl UnwindRule for UnwindRuleX86_64 {
                 let sp = regs.sp();
                 let bp = regs.bp();
                 if bp == 0 {
-                    return Ok(None);
+                    // bp == 0 mid-walk under a UseFramePointer rule means the
+                    // captured registers can't continue the walk. The only
+                    // legitimate end-of-stack signal is the explicit
+                    // `EndOfStack` rule; everything else is drift.
+                    return Err(Error::UnexpectedEndOfStack);
                 }
                 let new_sp = bp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                 if new_sp <= sp {
@@ -239,7 +243,15 @@ impl UnwindRule for UnwindRuleX86_64 {
         let return_address =
             read_stack(new_sp - 8).map_err(|_| Error::CouldNotReadStack(new_sp - 8))?;
         if return_address == 0 {
-            return Ok(None);
+            // The slot at new_sp - 8 contains zero. This is not a real return
+            // address (code can't live at 0). On Linux/perf captures it
+            // typically means the (IP, regs, stack) triple is internally
+            // inconsistent — the captured SP reflects post-execution state of
+            // an SP-modifying instruction, so the DWARF rule's offset points
+            // to the wrong slot. Surface this so the caller can drop the
+            // sample. The only legitimate end-of-stack signal is the
+            // explicit `EndOfStack` rule.
+            return Err(Error::UnexpectedEndOfStack);
         }
         if new_sp == sp && return_address == regs.ip() {
             return Err(Error::DidNotAdvance);
@@ -279,7 +291,9 @@ mod test {
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.bp(), 0x70);
         let res = UnwindRuleX86_64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
-        assert_eq!(res, Ok(None));
+        // Reading bp == 0 mid-walk now surfaces as UnexpectedEndOfStack instead
+        // of being silently treated as legitimate end-of-stack.
+        assert_eq!(res, Err(Error::UnexpectedEndOfStack));
     }
 
     #[test]

@@ -185,6 +185,9 @@ impl UnwindRule for UnwindRuleAarch64 {
                 let new_lr = read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
                 let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
                 if new_fp == 0 {
+                    // On aarch64 (notably macOS) the OS sets up a sentinel of
+                    // fp = 0 at the bottom of the thread stack, so this is a
+                    // legitimate end-of-stack signal under FP walks.
                     return Ok(None);
                 }
                 if new_fp <= fp || new_sp <= sp {
@@ -213,6 +216,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                     read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
 
                 if new_fp == 0 {
+                    // See the comment in `UseFramePointer` above.
                     return Ok(None);
                 }
                 if new_fp <= fp || new_sp <= sp {
@@ -223,7 +227,8 @@ impl UnwindRule for UnwindRuleAarch64 {
         };
         let return_address = regs.lr_mask().strip_ptr_auth(new_lr);
         if return_address == 0 {
-            return Ok(None);
+            // See the equivalent comment in the x86_64 unwind_rule.
+            return Err(Error::UnexpectedEndOfStack);
         }
         if !is_first_frame && new_sp == sp {
             return Err(Error::DidNotAdvance);
