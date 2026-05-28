@@ -139,6 +139,9 @@ impl UnwindRule for UnwindRuleAarch64 {
                     checked_add_signed(sp, fp_storage_offset).ok_or(Error::IntegerOverflow)?;
                 let new_fp =
                     read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
+                if new_fp == 0 {
+                    return Ok(None);
+                }
                 (new_lr, new_sp, new_fp)
             }
             UnwindRuleAarch64::UseFramePointer => {
