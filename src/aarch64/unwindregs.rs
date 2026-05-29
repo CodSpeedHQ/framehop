@@ -14,6 +14,14 @@ pub struct UnwindRegsAarch64 {
     lr: u64,
     sp: u64,
     fp: u64,
+    /// Whether the current `sp` value is only a frame-pointer-derived estimate
+    /// rather than a precise value. This is set when a frame is unwound via the
+    /// frame pointer (e.g. the fallback rule used for code without unwind info,
+    /// such as Chromium/Electron, where `new_sp = fp + 16` is only an
+    /// approximation of the caller's SP). It lets a subsequent SP-relative DWARF
+    /// rule detect and correct an SP that would otherwise read the wrong stack
+    /// slots and produce a bogus return address. See `UnwindRuleAarch64::exec`.
+    sp_unreliable: bool,
 }
 
 /// Aarch64 CPUs support special instructions which interpret pointers as pair
@@ -74,6 +82,7 @@ impl UnwindRegsAarch64 {
             lr,
             sp,
             fp,
+            sp_unreliable: false,
         }
     }
 
@@ -90,6 +99,7 @@ impl UnwindRegsAarch64 {
             lr: code_ptr_auth_mask.strip_ptr_auth(lr),
             sp,
             fp,
+            sp_unreliable: false,
         }
     }
 
@@ -134,6 +144,18 @@ impl UnwindRegsAarch64 {
     pub fn set_lr(&mut self, lr: u64) {
         self.lr = self.lr_mask.strip_ptr_auth(lr)
     }
+
+    /// Whether the current `sp` value is only a frame-pointer-derived estimate.
+    #[inline(always)]
+    pub fn sp_is_unreliable(&self) -> bool {
+        self.sp_unreliable
+    }
+
+    /// Mark whether the current `sp` value is only a frame-pointer-derived estimate.
+    #[inline(always)]
+    pub fn set_sp_unreliable(&mut self, unreliable: bool) {
+        self.sp_unreliable = unreliable
+    }
 }
 
 impl Debug for UnwindRegsAarch64 {
@@ -142,6 +164,7 @@ impl Debug for UnwindRegsAarch64 {
             .field("lr", &HexNum(self.lr))
             .field("sp", &HexNum(self.sp))
             .field("fp", &HexNum(self.fp))
+            .field("sp_unreliable", &self.sp_unreliable)
             .finish()
     }
 }
