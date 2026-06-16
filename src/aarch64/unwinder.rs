@@ -51,6 +51,10 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Unwinder for UnwinderAarch64<
         self.0.max_known_code_address()
     }
 
+    fn is_address_in_module(&self, address: u64) -> bool {
+        self.0.is_address_in_module(address)
+    }
+
     fn unwind_frame<F>(
         &self,
         address: FrameAddress,

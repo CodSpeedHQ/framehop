@@ -60,6 +60,16 @@ pub trait Unwinder: Clone {
     /// to make an educated guess at a pointer authentication mask for Aarch64 return addresses.
     fn max_known_code_address(&self) -> u64;
 
+    /// Returns whether `address` falls within the address range of any known
+    /// module, i.e. whether it points into code we have a module for.
+    ///
+    /// A genuine code address (an instruction pointer or a return address)
+    /// always lies in a known module. This lets a caller reject frames produced
+    /// by unreliable unwinding — e.g. frame-pointer walks over code without
+    /// unwind info, which can mistake a stack-local value for a saved return
+    /// address — that would otherwise surface as unresolved root frames.
+    fn is_address_in_module(&self, address: u64) -> bool;
+
     /// Unwind a single frame, to recover return address and caller register values.
     /// This is the main entry point for unwinding.
     fn unwind_frame<F>(
@@ -282,6 +292,10 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
 
     pub fn max_known_code_address(&self) -> u64 {
         self.modules.last().map_or(0, |m| m.avma_range.end)
+    }
+
+    pub fn is_address_in_module(&self, address: u64) -> bool {
+        self.find_module_for_address(address).is_some()
     }
 
     fn find_module_for_address(&self, address: u64) -> Option<(usize, u32)> {
